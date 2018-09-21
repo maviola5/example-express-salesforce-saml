@@ -9,7 +9,7 @@ const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const session = require('express-session');
 const port = process.env.PORT || 8888;
-
+ 
 passport.use(new SamlStrategy(
   {
     path: process.env.SAML_PATH,
@@ -26,10 +26,11 @@ passport.serializeUser((user, done) => {
   done(null, user);
 });
 passport.deserializeUser((id, done) => {
-  done(err, id);
+  done(null, id);
 });
-
-app.use(morgan('combined'));
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'pug');
+app.use(morgan('dev'));
 app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: false}));
@@ -44,16 +45,14 @@ app.use(passport.session());
 /**
  * simple home page
  */
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/', (req, res) => res.render('index', {title: 'Express, Passport, Saleforce SSO via SAML', user: req.user || {}}));
 
 /**
  * login route
  */
 app.get('/login',
   passport.authenticate('saml', { failureRedirect: '/', failureFlash: true }),
-  function(req, res) {
-    res.redirect('/');
-  }
+  (req, res) => res.redirect('/')
 );
 
 /**
@@ -61,11 +60,31 @@ app.get('/login',
  */
 app.post('/login/callback',
   passport.authenticate('saml', { failureRedirect: '/', failureFlash: true }),
-  function(req, res) {
-    res.json({
-      user: req.user
-    });
-  }
+  (req, res) => res.redirect('/profile')
 );
+
+/**
+ * logout route
+ */
+app.get('/logout', (req, res) => {
+  /**
+   * TODO - use SSO logout url in Salesforce in production (HTTPS required)
+   */
+  // passport logout method (kills the session)
+  req.logout();
+  res.redirect('/')
+});
+
+/**
+ * profile page
+ */
+app.get('/profile', 
+  (req, res) => {
+    if(req.isAuthenticated()) {
+      return res.render('profile', {user: req.user, title: 'Express, Passport, Saleforce SSO via SAML'});
+    }
+  res.redirect('/');
+});
+
 
 app.listen(port, () => console.log(`server on port ${port}`));
